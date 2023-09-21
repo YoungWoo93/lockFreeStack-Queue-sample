@@ -2,6 +2,16 @@
 #include <atomic>
 
 
+struct LoggingStruct
+{
+	unsigned long long int seqNo;
+	unsigned long long int pushPopValue;
+	unsigned long long int pushNodePtr;
+	unsigned long long int topPtr;
+	unsigned long long int popNodePtr;
+	unsigned long long int threadID;
+};
+
 namespace winAPI
 {
 	template <typename T>
@@ -46,9 +56,36 @@ namespace winAPI
 			}
 		}
 
+		LoggingStruct logging_push(T v)
+		{
+			node<T>* newNode = new node<T>(v);
+			node<T>* oldTop;
+			LoggingStruct ret;
+
+			while (true)
+			{
+				oldTop = top;
+				newNode->next = oldTop;
+
+				if (InterlockedCompareExchangePointer((PVOID*)&top, newNode, oldTop) == oldTop)
+				{
+					InterlockedIncrement(&_size);
+					break;
+				}
+
+			}
+
+			ret.popNodePtr = 0;
+			ret.pushNodePtr = (unsigned long long int)newNode;
+			ret.pushPopValue = (unsigned long long int)v;
+			ret.topPtr = (unsigned long long int)oldTop;
+
+			return ret;
+		}
+
 		T pop()
 		{
-			node<T>* popNode;
+			node<T>* nextTop;
 			node<T>* oldTop;
 			T ret;
 
@@ -58,17 +95,49 @@ namespace winAPI
 				if (oldTop == nullptr)
 					throw;
 
-				popNode = oldTop;
-				if (InterlockedCompareExchangePointer((PVOID*)&top, popNode->next, oldTop) == oldTop)
+				nextTop = oldTop->next;
+				if (InterlockedCompareExchangePointer((PVOID*)&top, nextTop, oldTop) == oldTop)
 				{
-					ret = popNode->value;
+					ret = oldTop->value;
 					InterlockedDecrement(&_size);
 					break;
 				}
 
 			}
 
-			delete popNode;
+			delete oldTop;
+			return ret;
+		}
+
+		LoggingStruct logging_pop()
+		{
+			node<T>* nextTop;
+			node<T>* oldTop;
+			LoggingStruct ret;
+			T retValue;
+
+			while (true)
+			{
+				oldTop = top;
+				if (oldTop == nullptr)
+					throw;
+
+				nextTop = oldTop->next;
+				if (InterlockedCompareExchangePointer((PVOID*)&top, nextTop, oldTop) == oldTop)
+				{
+					retValue = oldTop->value;
+					InterlockedDecrement(&_size);
+					break;
+				}
+
+			}
+
+			ret.popNodePtr = (unsigned long long int)oldTop;
+			ret.pushNodePtr = 0;
+			ret.pushPopValue = (unsigned long long int)retValue;
+			ret.topPtr = (unsigned long long int)nextTop;
+
+			delete oldTop;
 			return ret;
 		}
 

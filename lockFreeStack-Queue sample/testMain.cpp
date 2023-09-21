@@ -7,14 +7,15 @@
 
 using namespace std;
 
-//winAPI::LockFreeStack<unsigned long long int> stack;
-standard::LockFreeStack<unsigned long long int> stack;
-
+winAPI::LockFreeStack<unsigned long long int> stack;
+//standard::LockFreeStack<unsigned long long int> stack;
+unsigned long long int seqCount;
 
 bool threadRun;
 int threadCount;
-int testCount;
+unsigned long long int testCount;
 vector<vector<unsigned long long int>> result;
+vector<vector<LoggingStruct>> loggingResult;
 
 void PushPop_process(int startNumber, int pushPopSize)
 {
@@ -42,17 +43,52 @@ void PushPop_process(int startNumber, int pushPopSize)
 	}
 }
 
+void loggingPushPop_process(int startNumber, int pushPopSize)
+{
+	while (!threadRun)
+	{
+		//wait for start signal
+	};
+
+	unsigned long long int currentNumber = startNumber;
+	while (threadRun)
+	{
+		if (currentNumber > testCount)
+			break;
+
+		for (int i = 0; i < pushPopSize; i++)
+		{
+			auto logBlock = stack.logging_push(currentNumber);
+			logBlock.seqNo = InterlockedIncrement(&seqCount);
+			logBlock.threadID = startNumber;
+
+			loggingResult[startNumber].push_back(logBlock);
+			currentNumber += threadCount;
+		}
+
+		for (int i = 0; i < pushPopSize; i++)
+		{
+			auto logBlock = stack.logging_pop();
+			logBlock.seqNo = InterlockedIncrement(&seqCount);
+			logBlock.threadID = startNumber;
+
+			loggingResult[startNumber].push_back(logBlock);
+		}
+	}
+}
+
 void main()
 {
-	testCount = 10000;
+	testCount = -1;
 	threadCount = 2;
 	// 테스트 스레드 4개 생성
 
 	vector<thread> threads;
 	result.resize(threadCount);
+	loggingResult.resize(threadCount);
 
 	for (int i = 0; i < threadCount; i++)
-		threads.push_back(thread(PushPop_process, i, 10));
+		threads.push_back(thread(loggingPushPop_process, i, 10));
 	
 
 	threadRun = true;
@@ -62,7 +98,7 @@ void main()
 		threads[i].join();
 
 	// 이지점에서 break 후 result 확인
-	cout << stack.size();
+	//cout << stack.size();
 	cout << "break here";
 }
 
