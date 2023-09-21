@@ -7,8 +7,8 @@
 
 using namespace std;
 
-winAPI::LockFreeStack<unsigned long long int> stack;
-//standard::LockFreeStack<unsigned long long int> stack;
+//winAPI::LockFreeStack<unsigned long long int> stack;
+standard::LockFreeStack<unsigned long long int> stack;
 unsigned long long int seqCount;
 
 bool threadRun;
@@ -43,6 +43,7 @@ void PushPop_process(int startNumber, int pushPopSize)
 	}
 }
 
+/*
 void loggingPushPop_process(int startNumber, int pushPopSize)
 {
 	while (!threadRun)
@@ -76,10 +77,15 @@ void loggingPushPop_process(int startNumber, int pushPopSize)
 		}
 	}
 }
+*/
+
+
+#include <algorithm>
 
 void main()
 {
-	testCount = 10000000;
+
+	testCount = 80000;
 	threadCount = 4;
 	// 테스트 스레드 2개 생성
 
@@ -88,19 +94,18 @@ void main()
 	loggingResult.resize(threadCount);
 
 	for (int i = 0; i < threadCount; i++)
-		threads.push_back(thread(PushPop_process, i, 10000));
+		threads.push_back(thread(PushPop_process, i, 100));
 	
 
 	threadRun = true;
-
-	Sleep(100000);
-
+	Sleep(10000);
 	threadRun = false;
 	for (int i = 0; i < threadCount; i++)
 		threads[i].join();
 
+
 	// 이지점에서 break 후 result 확인
-	cout << stack.size();
+	//cout << stack.size();
 	cout << "break here";
 }
 
