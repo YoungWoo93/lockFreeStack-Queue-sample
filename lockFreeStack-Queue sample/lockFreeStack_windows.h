@@ -14,40 +14,50 @@ struct LoggingStruct
 
 namespace winAPI
 {
+	typedef unsigned long long int key;
+
 	template <typename T>
 	struct node
 	{
-		node(T v) : value(v), next(nullptr) {
+		node(T v) : value(v), next(0) {
 		};
 
 		T value;
-		node* next;
+		key next;
 	};
 
 	template <typename T>
 	class LockFreeStack {
 	public:
 
-		LockFreeStack() : _size(0), top(nullptr) {
-			seqCount = 0;
+		LockFreeStack() : _size(0), topKey(0), pushNo(0) {
 		}
 		~LockFreeStack() {};
 
-		int seqCount;
+		inline key MAKE_KEY(node<T>* nodePtr, unsigned long long int pushNo)
+		{
+			return (pushNo << 48) | (key)nodePtr;
+		}
+
+		inline node<T>* MAKE_NODEPTR(key _key)
+		{
+			return (node<T>*)(0x0000FFFFFFFFFFFF & _key);
+		}
 
 
 
 		void push(T v)
 		{
-			node<T>* newNode = new node<T>(v);
-			node<T>* oldTop;
+			node<T>* newNodePtr = new node<T>(v);
+			key newNodeKey = MAKE_KEY(newNodePtr, InterlockedIncrement(&pushNo));
+			key oldTopKey;
 
 			while (true)
 			{
-				oldTop = top;
-				newNode->next = oldTop;
+				oldTopKey = topKey;
+				newNodePtr->next = oldTopKey;
 
-				if (InterlockedCompareExchangePointer((PVOID*)&top, newNode, oldTop) == oldTop)
+				if (InterlockedCompareExchangePointer((PVOID*)&topKey, (PVOID)newNodeKey, (PVOID)oldTopKey) == (PVOID)oldTopKey)
 				{
 					InterlockedIncrement(&_size);
 					break;
@@ -58,16 +68,17 @@ namespace winAPI
 
 		LoggingStruct logging_push(T v)
 		{
-			node<T>* newNode = new node<T>(v);
-			node<T>* oldTop;
+			node<T>* newNodePtr = new node<T>(v);
+			key newNodeKey = MAKE_KEY(newNodePtr, InterlockedIncrement(&pushNo));
+			key oldTopKey;
 			LoggingStruct ret;
 
 			while (true)
 			{
-				oldTop = top;
-				newNode->next = oldTop;
+				oldTopKey = topKey;
+				newNodePtr->next = oldTopKey;
 
-				if (InterlockedCompareExchangePointer((PVOID*)&top, newNode, oldTop) == oldTop)
+				if (InterlockedCompareExchangePointer((PVOID*)&topKey, (PVOID)newNodeKey, (PVOID)oldTopKey) == (PVOID)oldTopKey)
 				{
 					InterlockedIncrement(&_size);
 					break;
@@ -76,68 +87,74 @@ namespace winAPI
 			}
 
 			ret.popNodePtr = 0;
-			ret.pushNodePtr = (unsigned long long int)newNode;
+			ret.pushNodePtr = (unsigned long long int)newNodePtr;
 			ret.pushPopValue = (unsigned long long int)v;
-			ret.topPtr = (unsigned long long int)oldTop;
+			ret.topPtr = (unsigned long long int)MAKE_NODEPTR(oldTopKey);
 
 			return ret;
 		}
 
 		T pop()
 		{
-			node<T>* nextTop;
-			node<T>* oldTop;
+			key nextTopKey;
+			key oldTopKey;
+			node<T>* popNodePtr;
 			T ret;
 
 			while (true)
 			{
-				oldTop = top;
-				if (oldTop == nullptr)
+				oldTopKey = topKey;
+				popNodePtr = MAKE_NODEPTR(oldTopKey);
+				if (popNodePtr == nullptr)
 					throw;
 
-				nextTop = oldTop->next;
-				if (InterlockedCompareExchangePointer((PVOID*)&top, nextTop, oldTop) == oldTop)
+				nextTopKey = popNodePtr->next;
+				
+				if (InterlockedCompareExchangePointer((PVOID*)&topKey, (PVOID)nextTopKey, (PVOID)oldTopKey) == (PVOID)oldTopKey)
 				{
-					ret = oldTop->value;
+					ret = popNodePtr->value;
 					InterlockedDecrement(&_size);
 					break;
 				}
-
 			}
 
-			delete oldTop;
+			delete popNodePtr;
+
 			return ret;
 		}
 
 		LoggingStruct logging_pop()
 		{
-			node<T>* nextTop;
-			node<T>* oldTop;
+			key nextTopKey;
+			key oldTopKey;
+			node<T>* popNodePtr;
 			LoggingStruct ret;
 			T retValue;
 
 			while (true)
 			{
-				oldTop = top;
-				if (oldTop == nullptr)
+				oldTopKey = topKey;
+				popNodePtr = MAKE_NODEPTR(oldTopKey);
+				if (popNodePtr == nullptr)
 					throw;
 
-				nextTop = oldTop->next;
-				if (InterlockedCompareExchangePointer((PVOID*)&top, nextTop, oldTop) == oldTop)
+				nextTopKey = popNodePtr->next;
+
+				if (InterlockedCompareExchangePointer((PVOID*)&topKey, (PVOID)nextTopKey, (PVOID)oldTopKey) == (PVOID)oldTopKey)
 				{
-					retValue = oldTop->value;
+					retValue = popNodePtr->value;
 					InterlockedDecrement(&_size);
 					break;
 				}
-
 			}
 
-			ret.popNodePtr = (unsigned long long int)oldTop;
+			ret.popNodePtr = (unsigned long long int)popNodePtr;
 			ret.pushNodePtr = 0;
 			ret.pushPopValue = (unsigned long long int)retValue;
-			ret.topPtr = (unsigned long long int)nextTop;
+			ret.topPtr = (unsigned long long int)MAKE_NODEPTR(nextTopKey);
 
-			delete oldTop;
+			delete popNodePtr;
+
 			return ret;
 		}
 
@@ -147,6 +164,7 @@ namespace winAPI
 		}
 
 		size_t _size;
-		node<T>* top;
+		key topKey;
+		unsigned long long int pushNo;
 	};
 }

@@ -29,7 +29,7 @@ void PushPop_process(int startNumber, int pushPopSize)
 	{
 		if (currentNumber > testCount)
 			break;
-
+		InterlockedIncrement(&seqCount);
 		for (int i = 0; i < pushPopSize; i++)
 		{
 			stack.push(currentNumber);
@@ -79,26 +79,28 @@ void loggingPushPop_process(int startNumber, int pushPopSize)
 
 void main()
 {
-	testCount = -1;
-	threadCount = 2;
-	// 테스트 스레드 4개 생성
+	testCount = 10000000;
+	threadCount = 4;
+	// 테스트 스레드 2개 생성
 
 	vector<thread> threads;
 	result.resize(threadCount);
 	loggingResult.resize(threadCount);
 
 	for (int i = 0; i < threadCount; i++)
-		threads.push_back(thread(loggingPushPop_process, i, 10));
+		threads.push_back(thread(PushPop_process, i, 10000));
 	
 
 	threadRun = true;
-	Sleep(1000);
+
+	Sleep(100000);
+
 	threadRun = false;
 	for (int i = 0; i < threadCount; i++)
 		threads[i].join();
 
 	// 이지점에서 break 후 result 확인
-	//cout << stack.size();
+	cout << stack.size();
 	cout << "break here";
 }
 
